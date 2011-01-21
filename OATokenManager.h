@@ -17,6 +17,9 @@
 - (BOOL)tokenManager:(OATokenManager *)manager failedCall:(OACall *)call withError:(NSError *)error;
 - (BOOL)tokenManager:(OATokenManager *)manager failedCall:(OACall *)call withProblem:(OAProblem *)problem;
 
+- (void) tokenManager:(OATokenManager*)manager redirectingAuthURLRequest:(NSURLRequest*)request;
+- (void) tokenManager:(OATokenManager*)manager obtainedAuthToken:(OAToken*)token;
+
 @optional
 
 - (BOOL)tokenManagerNeedsToken:(OATokenManager *)manager;
@@ -42,6 +45,8 @@
 	BOOL isDispatching;
 }
 
+@property (nonatomic,retain) OAToken* accessToken;
+@property (nonatomic,copy) NSString* callback;
 
 - (id)init;
 
@@ -49,6 +54,8 @@
 				 realm:(const NSString *)aRealm callback:(const NSString *)aCallback
 			  delegate:(NSObject <OATokenManagerDelegate> *)aDelegate;
 
+- (void)requestToken;
+- (void)exchangeToken;
 - (void)authorizedToken:(const NSString *)key;
 
 - (void)fetchData:(NSString *)aURL finished:(SEL)didFinish;

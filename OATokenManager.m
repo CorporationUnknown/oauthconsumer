@@ -11,6 +11,7 @@
 #import "OAProblem.h"
 #import "OACall.h"
 #import "OATokenManager.h"
+#import "OAMutableURLRequest.h"
 
 @interface OATokenManager (Private)
 
@@ -21,9 +22,7 @@
 - (void)dispatch;
 - (void)performCall:(OACall *)aCall;
 
-- (void)requestToken;
 - (void)requestTokenReceived;
-- (void)exchangeToken;
 - (void)renewToken;
 - (void)accessTokenReceived;
 - (void)setAccessToken:(OAToken *)token;
@@ -37,6 +36,9 @@
 @end
 
 @implementation OATokenManager
+
+@synthesize accessToken = acToken;
+@synthesize callback;
 
 - (id)init {
 	return [self initWithConsumer:nil
@@ -210,12 +212,10 @@
 
 - (void)requestToken
 {
-	/* Try to load an access token from settings */
-	OAToken *atoken = [[[OAToken alloc] initWithUserDefaultsUsingServiceProviderName:oauthBase prefix:[@"access:" stringByAppendingString:realm]] autorelease];
-	if (atoken && [atoken isValid]) {
-		[self setAccessToken:atoken];
+	if ( self.accessToken ) {
 		return;
 	}
+	
 	/* Try to load a stored requestToken from
 	 settings (useful for iPhone) */
 	OAToken *token = [[[OAToken alloc] initWithUserDefaultsUsingServiceProviderName:oauthBase prefix:[@"request:" stringByAppendingString:realm]] autorelease];
@@ -231,7 +231,13 @@
 			return;
 		}
 	}
-	OACall *call = [[OACall alloc] initWithURL:[NSURL URLWithString:[oauthBase stringByAppendingString:@"request_token"]] method:@"POST"];
+	
+	NSMutableArray* parameters = [NSMutableArray array];
+	if ( callback ) {
+		[parameters addObject:[OARequestParameter requestParameter:@"oauth_callback" value:callback]];
+	}
+
+	OACall *call = [[OACall alloc] initWithURL:[NSURL URLWithString:[oauthBase stringByAppendingString:@"request_token"]] method:@"POST" parameters:parameters];
 	[call perform:consumer
 			token:initialToken
 			realm:realm
@@ -254,8 +260,20 @@
 		 before the token is authorized (useful for iPhone) */
 		NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"%@authorize?oauth_token=%@&oauth_callback=%@",
 										   oauthBase, token.key, callback]];
-		[[UIApplication sharedApplication] openURL:url];
-
+		
+		OAMutableURLRequest* request = [[OAMutableURLRequest alloc] initWithURL:url
+																							consumer:consumer
+																								token:reqToken
+																								realm:realm
+																				signatureProvider:nil];
+		[request prepare];
+		
+		if ( [delegate respondsToSelector:@selector(tokenManager:redirectingAuthURLRequest:)] ) {
+			[delegate performSelector:@selector(tokenManager:redirectingAuthURLRequest:)
+								withObject:self
+								withObject:request];
+		}
+		[request release];
 	}
 	[call release];
 }
@@ -271,7 +289,12 @@
 		return;
 	}
 	NSURL *url = [NSURL URLWithString:[oauthBase stringByAppendingString:@"access_token"]];
-	OACall *call = [[OACall alloc] initWithURL:url method:@"POST"];
+	NSMutableArray* parameters = [NSMutableArray array];
+	if ( callback ) {
+		[parameters addObject:[OARequestParameter requestParameter:@"oauth_verifier" value:authorizedTokenKey]];
+	}
+	
+	OACall *call = [[OACall alloc] initWithURL:url method:@"POST" parameters:parameters];
 	[call perform:consumer
 			token:reqToken
 			realm:realm
@@ -301,6 +324,17 @@
 		didFinish:@selector(accessTokenReceived:body:)];	
 }
 
+- (OAToken*) accessToken {
+	if ( ! acToken ) {
+		OAToken *atoken = [[[OAToken alloc] initWithUserDefaultsUsingServiceProviderName:oauthBase prefix:[@"access:" stringByAppendingString:realm]] autorelease];
+		if (atoken && [atoken isValid]) {
+			[self setAccessToken:atoken];
+		}	
+	}
+	
+	return [[acToken retain] autorelease];
+}
+
 - (void)setAccessToken:(OAToken *)token {
 	/* Remove the stored requestToken which generated
 	 this access token */
@@ -318,6 +352,10 @@
 		[acToken release];
 		acToken = nil;
 		[OAToken removeFromUserDefaultsWithServiceProviderName:oauthBase prefix:[@"access:" stringByAppendingString:realm]];
+	}
+	
+	if ( [delegate respondsToSelector:@selector(tokenManager:obtainedAuthToken:)] ) {
+		[delegate tokenManager:self obtainedAuthToken:acToken];
 	}
 }
 
