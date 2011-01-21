@@ -94,7 +94,6 @@
 - (void)callFailed:(OAServiceTicket *)aTicket withError:(NSError *)error {
 	NSLog(@"error body: %@", aTicket.body);
 	self.ticket = aTicket;
-	[aTicket release];
 	OAProblem *problem = [OAProblem problemWithResponseBody:ticket.body];
 	if (problem) {
 		[delegate call:self failedWithProblem:problem];
@@ -105,13 +104,12 @@
 
 - (void)callFinished:(OAServiceTicket *)aTicket withData:(NSData *)data {
 	self.ticket = aTicket;
-	[aTicket release];
 	if (ticket.didSucceed) {
 //		NSLog(@"Call body: %@", ticket.body);
 		[delegate performSelector:finishedSelector withObject:self withObject:ticket.body];
 	} else {
 //		NSLog(@"Failed call body: %@", ticket.body);
-		[self callFailed:[ticket retain] withError:nil];
+		[self callFailed:ticket withError:nil];
 	}
 }
 
